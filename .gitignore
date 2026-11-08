@@ -5,7 +5,12 @@ __pycache__/
 *.so
 .Python
 
-# Dữ liệu nặng và file nhị phân (TUYỆT ĐỐI KHÔNG PUSH LÊN GITHUB)
+# Tài liệu nội bộ & Đề bài môn học (KHÔNG ĐƯA LÊN GIT)
+huongdan/
+phanchia.md
+*.docx
+
+# Dữ liệu nặng và file nhị phân
 data/raw/*.txt
 !data/raw/.gitkeep
 data/processed/*.bin
@@ -33,4 +38,3 @@ miniconda3/
 .idea/
 .DS_Store
 Thumbs.db
-
