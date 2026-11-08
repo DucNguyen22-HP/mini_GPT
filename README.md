@@ -62,3 +62,4 @@ python analyze_corpus.py
 
 ### 4. Mốc nộp bài Tuần 1: Proposal
 Bản Proposal 2 trang theo định dạng ACL được lưu tại mã nguồn `proposal.tex` và trích dẫn tại `references.bib`.
+

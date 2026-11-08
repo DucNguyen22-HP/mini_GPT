@@ -84,3 +84,4 @@ Dự án nghiên cứu và kế thừa trực tiếp từ 3 bài báo kinh đi�
 - **Thành viên 1 (Nguyễn Đức Vũ Bảo):** Phụ trách toàn bộ Data Pipeline (tải, lọc, chuẩn hóa Unicode NFC, phân chia train/val/test); Huấn luyện BPE Tokenizer 16k; Cài đặt và đánh giá Baseline 1 (N-gram LM); Chuẩn bị tập dữ liệu Instruction-tuning.
 - **Thành viên 2:** Tự cài đặt kiến trúc GPT Decoder-only (Attention, MLP, LayerNorm, Weight Tying); Xây dựng script `train.py` (AdamW, Cosine schedule, AMP FP16, Gradient Accumulation); Huấn luyện mô hình GPT chính và chạy instruction-tuning.
 - **Thành viên 3:** Cài đặt và huấn luyện Baseline 2 (LSTM LM); Xây dựng pipeline đánh giá Perplexity/BPB; Chạy các mô hình để vẽ biểu đồ Scaling Law; Viết module Sampling (Temperature, Top-k, Top-p) và thực hiện đánh giá định tính.
+
