@@ -1,0 +1,127 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese,english]{babel}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{cite}
+
+\geometry{a4paper, margin=2cm}
+\twocolumn
+
+\title{\textbf{Đề xuất đề tài (Proposal): Xây dựng mô hình ngôn ngữ nhỏ (mini-GPT) từ đầu cho tiếng Việt}}
+
+\author{
+  \textbf{Nguyễn Đức Vũ Bảo} (Thành viên 1 - Trưởng nhóm) \\
+  \textit{Phụ trách: Dữ liệu, Tokenizer \& N-gram Baseline} \\
+  \texttt{MSSV: [Điền MSSV]}
+  \and
+  \textbf{[Họ và tên TV2]} (Thành viên 2) \\
+  \textit{Phụ trách: Kiến trúc GPT \& Pipeline huấn luyện} \\
+  \texttt{MSSV: [Điền MSSV]}
+  \and
+  \textbf{[Họ và tên TV3]} (Thành viên 3) \\
+  \textit{Phụ trách: Baseline LSTM, Đánh giá \& Scaling} \\
+  \texttt{MSSV: [Điền MSSV]}
+}
+
+\date{}
+
+\begin{document}
+\selectlanguage{vietnamese}
+\maketitle
+
+\begin{abstract}
+Đề xuất này trình bày kế hoạch nghiên cứu và tự cài đặt mô hình ngôn ngữ tự hồi quy (Autoregressive Language Model) cỡ nhỏ dạng Transformer decoder (mini-GPT, quy mô 10--30 triệu tham số) trên ngữ liệu tiếng Việt. Nghiên cứu thực hiện đối chuẩn (benchmarking) trực tiếp với hai baseline gồm N-gram LM và LSTM LM, đồng thời khảo sát định luật mở rộng quy mô (Scaling Law) và các chiến lược lấy mẫu (Sampling).
+\end{abstract}
+
+\section{Bài toán và Phát biểu bài toán}
+Mô hình ngôn ngữ tự hồi quy hướng tới việc mô hình hóa phân phối xác suất chung của chuỗi ngôn ngữ tự nhiên thông qua quy tắc nhân:
+\begin{equation}
+P(x_1, \dots, x_T) = \prod_{t=1}^T P(x_t \mid x_{<t})
+\end{equation}
+\begin{itemize}
+    \item \textbf{Đầu vào (Input):} Đoạn văn bản gợi ý (Prompt) tiếng Việt $x_{<t} = (x_1, \dots, x_{t-1})$.
+    \item \textbf{Đầu ra (Output):} Phân phối xác suất token kế tiếp $P(x_t \mid x_{<t})$ và đoạn văn bản tiếng Việt hoàn chỉnh được sinh tiếp tự hồi quy.
+    \item \textbf{Mục tiêu:} Tự lập trình từ đầu kiến trúc Transformer decoder bằng PyTorch, tối ưu hóa quá trình tiền xử lý tiếng Việt, và đo lường định lượng hiệu năng so với các kiến trúc truyền thống.
+\end{itemize}
+
+\section{Các bài báo nền tảng (Related Work)}
+Dự án kế thừa trực tiếp từ 3 công trình nền tảng:
+\begin{enumerate}
+    \item \textbf{Vaswani et al. (2017) \cite{vaswani2017attention}:} Đề xuất cơ chế Scaled Dot-Product Attention và Multi-Head Attention, loại bỏ hoàn toàn tính tuần tự của mạng RNN/LSTM và tối ưu hóa tính toán ma trận song song.
+    \item \textbf{Radford et al. (2019) \cite{radford2019language} (GPT-2):} Chuẩn hóa kiến trúc Transformer Decoder với kỹ thuật Pre-LayerNorm, Weight Tying giữa tầng embedding và classification head, đồng thời ứng dụng Byte-Level Byte-Pair Encoding (BPE) để xử lý triệt để từ ngoài từ điển (OOV).
+    \item \textbf{Kaplan et al. (2020) \cite{kaplan2020scaling}:} Khám phá định luật mở rộng quy mô (Scaling Laws), chứng minh hàm mất mát (loss) tuân theo định luật lũy thừa (Power Law) theo số lượng tham số mô hình phi-embedding ($N$) và dung lượng dữ liệu ($D$).
+\end{enumerate}
+
+\section{Dữ liệu và Tiền xử lý (Data Pipeline)}
+\begin{itemize}
+    \item \textbf{Ngữ liệu chính:} Trích xuất từ Wikipedia tiếng Việt (khoảng 60MB -- 100MB văn bản thuần, $\approx 25$--$35$ triệu tokens).
+    \item \textbf{Chuẩn hóa Unicode (NFC):} Văn bản tiếng Việt thường lẫn lộn hai bảng mã dựng sẵn (NFC) và tổ hợp (NFD). Nhóm chuẩn hóa toàn bộ văn bản về dạng Unicode NFC nhằm tránh phân mảnh từ vựng.
+    \item \textbf{Phân chia tập dữ liệu:} Tỷ lệ phân tách là 90\% Train / 5\% Validation / 5\% Test theo bài viết (tránh rò rỉ ngữ cảnh giữa các câu trong cùng một văn bản).
+    \item \textbf{Tokenizer BPE:} Huấn luyện Byte-Level BPE với kích thước từ vựng $V = 16.384$ (tối ưu hóa nhân ma trận trên GPU).
+    \item \textbf{Định dạng nhị phân:} Toàn bộ dữ liệu được mã hóa thành mảng số nguyên 16-bit (\texttt{uint16}) lưu dưới dạng file \texttt{.bin}, nạp trực tiếp qua \texttt{numpy.memmap} với chi phí RAM bằng 0.
+    \item \textbf{Tập dữ liệu mở rộng:} Chuẩn bị khoảng 2.000--3.000 mẫu hỏi--đáp ngắn (ViAlpaca) phục vụ bước Instruction-tuning.
+\end{itemize}
+
+\section{Mô hình đề xuất và Baselines}
+\subsection{Hai mô hình Baseline đối chuẩn}
+\begin{itemize}
+    \item \textbf{Baseline 1 (N-gram LM):} Cài đặt mô hình 3-gram và 4-gram với thuật toán làm mịn Add-$k$ (Laplace/Lidstone smoothing). Mô hình N-gram được đếm trực tiếp trên chuỗi ID của BPE Tokenizer để đảm bảo tính công bằng khi so sánh Perplexity.
+    \item \textbf{Baseline 2 (LSTM LM):} Mạng LSTM 2 tầng với $d_{embed}=384$, $d_{hidden}=512$, dropout = 0.2. Kích thước mô hình được thiết kế đạt khoảng 12 triệu tham số nhằm đối trọng trực diện với mô hình GPT-Small cùng ngân sách tham số.
+\end{itemize}
+
+\subsection{Mô hình chính: Mini-GPT Decoder}
+Kiến trúc Transformer Decoder tự cài đặt bằng PyTorch:
+\begin{itemize}
+    \item Causal Multi-Head Self-Attention tích hợp FlashAttention (\texttt{is\_causal=True}).
+    \item Khối Pre-LayerNorm và MLP với hàm kích hoạt GELU.
+    \item Chia sẻ trọng số (Weight Tying) giữa Token Embedding và LM Head.
+    \item Thiết lập huấn luyện: Tối ưu hóa bằng AdamW ($\beta_1=0.9, \beta_2=0.95$), lịch giảm learning rate Cosine Annealing có Warmup, huấn luyện hỗn hợp FP16 (AMP) và Gradient Accumulation.
+\end{itemize}
+
+\section{Phương pháp đánh giá (Evaluation)}
+\begin{enumerate}
+    \item \textbf{Độ đo định lượng:} Đo Perplexity (PPL) và Bits-per-byte (BPB) trên tập Test:
+    \begin{equation}
+    \text{PPL} = \exp\left(-\frac{1}{M} \sum_{t=1}^M \ln P(x_t \mid x_{<t})\right)
+    \end{equation}
+    \item \textbf{Khảo sát Scaling Law:} Huấn luyện mô hình ở 4 mốc: Mini (3.8M), Small (11.5M), Medium (22.8M), Large (31.2M tham số phi-embedding) và fit phương trình hàm mũ: $L(N) = a \cdot N^{-b} + c$.
+    \item \textbf{Khảo sát giải mã (Sampling):} So sánh văn bản sinh ra từ các prompt mở đầu khi thay đổi Temperature $T \in \{0.5, 0.8, 1.2\}$, Top-$k \in \{10, 50\}$, Top-$p \in \{0.85, 0.95\}$.
+    \item \textbf{Đánh giá định tính:} Đánh giá mù (blind test) chất lượng văn bản sinh theo 3 tiêu chí: độ trôi chảy, ngữ pháp và mạch lạc.
+\end{enumerate}
+
+\section{Phân công nhiệm vụ và Tiến độ 6 tuần}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lp{5.5cm}}
+\toprule
+\textbf{Tuần} & \textbf{Nội dung chính \& Sản phẩm} \\
+\midrule
+Tuần 1 & Proposal (2 trang), tải dữ liệu, chuẩn hóa NFC, train Tokenizer BPE 16k, cấu trúc repo. \\
+Tuần 2 & Cài đặt và đo PPL của 2 baseline (N-gram và LSTM); dựng pipeline \texttt{train.py}. \\
+Tuần 3 & Huấn luyện mô hình GPT chính (11.5M), nộp Milestone report (tối đa 4 trang). \\
+Tuần 4 & Thí nghiệm Scaling Law (chạy 4 mốc cấu hình), vẽ đồ thị log-log fitting. \\
+Tuần 5 & Thí nghiệm Decoding (Sampling grid), chạy instruction-tune mở rộng; nộp bản nháp báo cáo. \\
+Tuần 6 & Hoàn thiện báo cáo ACL (8 trang), mã nguồn, slide thuyết trình và chuẩn bị demo. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent \textbf{Phân công trách nhiệm chi tiết:}
+\begin{itemize}
+    \item \textbf{Thành viên 1 (Nguyễn Đức Vũ Bảo):} Phụ trách Data Pipeline (thu thập, làm sạch, Unicode NFC, chia train/val/test); Huấn luyện BPE Tokenizer 16k và xuất file nhị phân \texttt{.bin}; Cài đặt và đánh giá Baseline 1 (N-gram LM); Chuẩn bị tập dữ liệu Instruction-tuning.
+    \item \textbf{Thành viên 2:} Cài đặt kiến trúc GPT (Attention, MLP, Pre-LayerNorm, Weight Tying); Xây dựng script \texttt{train.py} (AdamW, Cosine LR, AMP fp16, GradAccum); Huấn luyện mô hình GPT chính và tinh chỉnh instruction-tuning.
+    \item \textbf{Thành viên 3:} Cài đặt và huấn luyện Baseline 2 (LSTM LM); Xây dựng pipeline đánh giá Perplexity/BPB; Chạy thực nghiệm Scaling Law; Viết hàm Sampling giải mã (Temperature, Top-$k$, Top-$p$) và đánh giá chất lượng văn bản sinh.
+\end{itemize}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

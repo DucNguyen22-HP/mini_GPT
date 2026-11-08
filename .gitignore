@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Dữ liệu nặng và file nhị phân (TUYỆT ĐỐI KHÔNG PUSH LÊN GITHUB)
+data/raw/*.txt
+!data/raw/.gitkeep
+data/processed/*.bin
+*.bin
+
+# Checkpoints trọng số mô hình lớn
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Log huấn luyện
+runs/
+wandb/
+*.log
+
+# Môi trường ảo
+env/
+venv/
+.venv/
+miniconda3/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
