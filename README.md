@@ -2,7 +2,7 @@
 ## Xây dựng mô hình ngôn ngữ nhỏ (mini-GPT) từ đầu cho tiếng Việt
 
 ### 1. Thành viên nhóm & Phân công nhiệm vụ
-- **Thành viên 1 (Trưởng nhóm): Nguyễn Đức Vũ Bảo** (MSSV: `[Điền MSSV]`)
+- **Thành viên 1: Nguyễn Đức Vũ Bảo** (MSSV: `[Điền MSSV]`)
   - *Nhiệm vụ chính:* Xây dựng Data Pipeline, chuẩn hóa Unicode NFC, huấn luyện BPE Tokenizer 16k, cài đặt Baseline 1 (N-gram LM), chuẩn bị dữ liệu Instruction-tuning.
 - **Thành viên 2:** `[Họ và tên TV2]` (MSSV: `[Điền MSSV]`)
   - *Nhiệm vụ chính:* Tự cài đặt kiến trúc GPT Decoder-only (Attention, MLP, Pre-LayerNorm, Weight Tying), xây dựng pipeline `train.py` (AdamW, Cosine LR, AMP FP16, GradAccum), huấn luyện mô hình chính (10--30M).
