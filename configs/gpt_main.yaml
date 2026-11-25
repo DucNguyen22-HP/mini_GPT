@@ -1,0 +1,25 @@
+model:
+  block_size: 256
+  n_layer: 6
+  n_head: 6
+  n_embd: 384
+  dropout: 0.1
+
+data:
+  tokenizer: data/tokenizer.json
+  train: data/processed/train.bin
+  validation: data/processed/val.bin
+
+training:
+  seed: 42
+  batch_size: 4
+  accumulation_steps: 8
+  max_steps: 2500
+  warmup_steps: 500
+  learning_rate: 0.0003
+  min_learning_rate: 0.00003
+  weight_decay: 0.1
+  grad_clip: 1.0
+  precision: fp16
+  eval_every: 250
+  log_every: 10
