@@ -1,5 +1,8 @@
 import os
+import re
 import sys
+import json
+import hashlib
 import argparse
 import unicodedata
 import numpy as np
@@ -23,18 +26,23 @@ SAMPLE_VIETNAMESE_TEXT = [
 ]
 
 def normalize_text(text: str) -> str:
-    """Chuẩn hóa bảng mã Unicode sang dạng NFC và làm sạch khoảng trắng thừa."""
+    """Chuẩn hóa bảng mã Unicode sang dạng NFC, lọc ký tự điều khiển/rác và làm sạch khoảng trắng thừa."""
     if not isinstance(text, str):
         return ""
     # Chuẩn hóa về NFC
     text = unicodedata.normalize("NFC", text)
     # Xử lý xuống dòng thống nhất
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Lọc ký tự điều khiển / rác (giữ lại \n và \t)
+    text = "".join(ch for ch in text if ch in ("\n", "\t") or unicodedata.category(ch)[0] != "C")
+    # Gom khoảng trắng thừa trên cùng dòng
+    text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
 
-def clean_and_split_corpus(raw_dir: Path, min_length: int = 40):
-    """Đọc toàn bộ file txt trong raw_dir, làm sạch và gom thành danh sách văn bản."""
+def clean_and_split_corpus(raw_dir: Path, min_length: int = 50):
+    """Đọc toàn bộ file txt trong raw_dir, làm sạch, lọc trùng lặp và gom thành danh sách văn bản."""
     documents = []
+    seen = set()
     txt_files = list(raw_dir.glob("*.txt"))
     
     if not txt_files:
@@ -50,10 +58,11 @@ def clean_and_split_corpus(raw_dir: Path, min_length: int = 40):
         paragraphs = content.split("\n\n")
         for p in paragraphs:
             norm_p = normalize_text(p)
-            if len(norm_p) >= min_length:
+            if len(norm_p) >= min_length and norm_p not in seen:
+                seen.add(norm_p)
                 documents.append(norm_p)
                 
-    print(f"[+] Tổng số đoạn/văn bản thu được: {len(documents)}")
+    print(f"[+] Tổng số đoạn/văn bản sạch (đã lọc trùng): {len(documents)}")
     return documents
 
 def generate_mock_data(raw_dir: Path, num_copies: int = 500):
@@ -99,26 +108,38 @@ def train_tokenizer(texts_for_training: list, save_path: Path, vocab_size: int =
     print(f"[+] Tokenizer đã được lưu tại: {save_path}")
     return tokenizer
 
-def encode_and_save_bin(tokenizer, documents: list, split_ratios=(0.9, 0.05, 0.05), output_dir: Path = Path("data/processed")):
-    """Mã hóa toàn bộ văn bản sang uint16 và lưu thành train.bin, val.bin, test.bin."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    eot_id = tokenizer.token_to_id("<|endoftext|>")
-    
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def split_documents(documents: list, split_ratios=(0.9, 0.05, 0.05)) -> dict:
+    """Chia danh sách tài liệu theo tỷ lệ train/val/test."""
     n_docs = len(documents)
     n_train = int(n_docs * split_ratios[0])
     n_val = int(n_docs * split_ratios[1])
-    
-    splits = {
+    return {
         "train": documents[:n_train],
         "val": documents[n_train:n_train + n_val],
-        "test": documents[n_train + n_val:]
+        "test": documents[n_train + n_val:],
     }
 
+def encode_and_save_bin(tokenizer, splits: dict, tok_path: Path, output_dir: Path = Path("data/processed")):
+    """Mã hóa toàn bộ văn bản sang uint16, lưu .bin và xuất manifest.json cho TV2/TV3."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    eot_id = tokenizer.token_to_id("<|endoftext|>")
+    pad_id = tokenizer.token_to_id("<|pad|>")
+
     stats = {}
+    manifest_splits = {}
     for split_name, docs in splits.items():
         print(f"[*] Đang mã hóa tập {split_name} ({len(docs)} bài viết)...")
         all_ids = []
+        utf8_bytes = 0
         for doc in docs:
+            utf8_bytes += len(doc.encode("utf-8"))
             encoded = tokenizer.encode(doc)
             all_ids.extend(encoded.ids)
             all_ids.append(eot_id)  # Phân cách các bài viết bằng <|endoftext|>
@@ -127,7 +148,37 @@ def encode_and_save_bin(tokenizer, documents: list, split_ratios=(0.9, 0.05, 0.0
         bin_path = output_dir / f"{split_name}.bin"
         arr.tofile(bin_path)
         stats[split_name] = len(arr)
+        manifest_splits[split_name] = {
+            "documents": len(docs),
+            "tokens": int(len(arr)),
+            "utf8_bytes": int(utf8_bytes),
+            "file": str(bin_path),
+            "sha256": file_sha256(bin_path),
+        }
         print(f"[+] Đã lưu {bin_path.name}: {len(arr):,} tokens ({bin_path.stat().st_size / (1024*1024):.2f} MB)")
+
+    manifest = {
+        "vocab_size": len(tokenizer.get_vocab()),
+        "dtype": "uint16",
+        "special_tokens": {
+            "eos_token": "<|endoftext|>",
+            "eos_id": eot_id,
+            "bos_token": "<|endoftext|>",
+            "bos_id": eot_id,
+            "pad_token": "<|pad|>",
+            "pad_id": pad_id,
+            "unk_token": None,
+        },
+        "tokenizer": {
+            "file": str(tok_path),
+            "sha256": file_sha256(tok_path),
+        },
+        "splits": manifest_splits,
+    }
+    manifest_path = output_dir / "manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    print(f"[+] Đã lưu manifest bàn giao tại: {manifest_path}")
 
     return stats
 
@@ -153,17 +204,21 @@ def main():
         print("[!] Không có văn bản hợp lệ để xử lý!")
         return
 
-    # 2. Huấn luyện Tokenizer
-    tokenizer = train_tokenizer(documents, tok_path, vocab_size=args.vocab_size)
+    # 2. Chia train/val/test trước khi train Tokenizer (tránh rò rỉ dữ liệu)
+    splits = split_documents(documents)
 
-    # 3. Mã hóa & xuất các file .bin
-    stats = encode_and_save_bin(tokenizer, documents, output_dir=proc_path)
+    # 3. Huấn luyện Tokenizer chỉ trên tập train
+    tokenizer = train_tokenizer(splits["train"], tok_path, vocab_size=args.vocab_size)
+
+    # 4. Mã hóa & xuất các file .bin + manifest.json
+    stats = encode_and_save_bin(tokenizer, splits, tok_path=tok_path, output_dir=proc_path)
 
     print("\n" + "="*50)
     print("HOÀN THÀNH BÀN GIAO CHO THÀNH VIÊN 2 & 3:")
-    print(f"- Tokenizer: {tok_path}")
+    print(f"- Tokenizer: {tok_path} (vocab_size={len(tokenizer.get_vocab())})")
     for name, tokens in stats.items():
         print(f"- {name}.bin: {tokens:,} tokens")
+    print(f"- Manifest: {proc_path / 'manifest.json'}")
     print("="*50)
 
 if __name__ == "__main__":

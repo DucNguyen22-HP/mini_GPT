@@ -1,63 +1,94 @@
 import json
 import argparse
+import unicodedata
 from pathlib import Path
 
-SAMPLE_INSTRUCTIONS = [
-    {
-        "instruction": "Thủ đô của Việt Nam là gì?",
-        "output": "Thủ đô của Việt Nam là thành phố Hà Nội."
-    },
-    {
-        "instruction": "Kể tên 3 danh lam thắng cảnh nổi tiếng của Việt Nam.",
-        "output": "Ba danh lam thắng cảnh nổi tiếng của Việt Nam là Vịnh Hạ Long, Phố cổ Hội An và Quần thể danh thắng Tràng An."
-    },
-    {
-        "instruction": "Học sâu (Deep Learning) là gì?",
-        "output": "Học sâu là một nhánh của học máy dựa trên các mạng nơ-ron nhân tạo nhiều tầng, có khả năng tự động học các đặc trưng phức tạp từ dữ liệu thô."
-    },
-    {
-        "instruction": "Mô hình ngôn ngữ tự hồi quy hoạt động như thế nào?",
-        "output": "Mô hình ngôn ngữ tự hồi quy dự đoán token tiếp theo trong chuỗi dựa trên phân phối xác suất có điều kiện của toàn bộ các token đã xuất hiện trước đó."
-    },
-    {
-        "instruction": "Viết một câu thơ lục bát về quê hương.",
-        "output": "Quê hương là cánh diều chao, Ngọt ngào câu hát dạt dào lời ru."
-    }
+CANDIDATE_DATASETS = [
+    ("bkai-foundation-models/vi-alpaca", "train"),
+    ("vilm/vietnamese-alpaca", "train"),
+    ("5CD-AI/Vietnamese-395k-open-hermes", "train"),
 ]
 
-def generate_instruction_dataset(output_path: Path, num_samples: int = 1000):
-    """
-    Tạo hoặc chuẩn bị tập mẫu hỏi-đáp tiếng Việt phục vụ Instruction-tuning.
-    Khuôn mẫu chuẩn:
-    ### Câu hỏi: {instruction}
-    ### Trả lời: {output}<|endoftext|>
-    """
+
+def norm_nfc(text: str) -> str:
+    return unicodedata.normalize("NFC", text or "").strip()
+
+
+def extract_pair(item: dict):
+    """Trích xuất (instruction, output) từ các schema phổ biến trên Hugging Face."""
+    if "instruction" in item and "output" in item:
+        inst = norm_nfc(item.get("instruction", ""))
+        inp = norm_nfc(item.get("input", ""))
+        out = norm_nfc(item.get("output", ""))
+        if inp:
+            inst = f"{inst}\n{inp}"
+        return inst, out
+    if "conversations" in item and isinstance(item["conversations"], list):
+        convs = item["conversations"]
+        if len(convs) >= 2:
+            inst = norm_nfc(convs[0].get("value", ""))
+            out = norm_nfc(convs[1].get("value", ""))
+            return inst, out
+    return "", ""
+
+
+def generate_instruction_dataset(output_path: Path, num_samples: int = 2000, max_chars: int = 600):
+    """Tải tập hỏi-đáp tiếng Việt thật từ Hugging Face, chuẩn hóa NFC và xuất jsonl."""
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        print("[!] Chưa cài đặt thư viện 'datasets'. Vui lòng chạy: pip install datasets")
+        return
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[*] Đang xuất tập dữ liệu instruction-tuning ra {output_path}...")
-    
     samples = []
-    # Nhân bản hoặc mở rộng tập mẫu
-    for i in range(num_samples):
-        base = SAMPLE_INSTRUCTIONS[i % len(SAMPLE_INSTRUCTIONS)]
-        samples.append({
-            "instruction": base["instruction"],
-            "output": base["output"],
-            "formatted_text": f"### Câu hỏi: {base['instruction']}\n### Trả lời: {base['output']}<|endoftext|>"
-        })
+    seen = set()
+
+    for repo_id, split in CANDIDATE_DATASETS:
+        print(f"[*] Đang thử tải từ Hugging Face: {repo_id} ({split})...")
+        try:
+            ds = load_dataset(repo_id, split=split, streaming=True)
+            for item in ds:
+                inst, out = extract_pair(item)
+                if not inst or not out:
+                    continue
+                if len(inst) + len(out) > max_chars or len(out) < 10:
+                    continue
+                if inst in seen:
+                    continue
+                seen.add(inst)
+                samples.append({
+                    "instruction": inst,
+                    "output": out,
+                    "formatted_text": f"### Câu hỏi: {inst}\n### Trả lời: {out}<|endoftext|>",
+                })
+                if len(samples) >= num_samples:
+                    break
+            if samples:
+                print(f"[+] Đã lấy {len(samples)} mẫu từ {repo_id}")
+                break
+        except Exception as e:
+            print(f"[!] Không tải được {repo_id}: {e}")
+
+    if not samples:
+        print("[!] Không tải được dataset nào từ Hugging Face.")
+        return
 
     with open(output_path, "w", encoding="utf-8") as f:
         for item in samples:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-    print(f"[+] Đã tạo {len(samples)} mẫu instruction tại: {output_path}")
+    print(f"[+] Đã lưu {len(samples)} mẫu instruction thật tại: {output_path}")
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Tạo tập dữ liệu Instruction-Tuning (Thành viên 1)")
+    parser = argparse.ArgumentParser(description="Tạo tập dữ liệu Instruction-Tuning tiếng Việt (Thành viên 1)")
     parser.add_argument("--output", type=str, default="data/instructions.jsonl", help="Đường dẫn file jsonl")
     parser.add_argument("--num_samples", type=int, default=2000, help="Số lượng mẫu hỏi-đáp")
     args = parser.parse_args()
 
     generate_instruction_dataset(Path(args.output), num_samples=args.num_samples)
+
 
 if __name__ == "__main__":
     main()

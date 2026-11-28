@@ -1,0 +1,40 @@
+{
+  "vocab_size": 16384,
+  "dtype": "uint16",
+  "special_tokens": {
+    "eos_token": "<|endoftext|>",
+    "eos_id": 0,
+    "bos_token": "<|endoftext|>",
+    "bos_id": 0,
+    "pad_token": "<|pad|>",
+    "pad_id": 1,
+    "unk_token": null
+  },
+  "tokenizer": {
+    "file": "data\\tokenizer.json",
+    "sha256": "2526654e72b9cdad93ac73e90b88f8d8bdf859a3e3285382443c6a05bda49489"
+  },
+  "splits": {
+    "train": {
+      "documents": 181983,
+      "tokens": 22904224,
+      "utf8_bytes": 111676867,
+      "file": "data\\processed\\train.bin",
+      "sha256": "5bb443f92e0c1120bc12ea9e12a79ea2c666d683fbd332757f518f868c898e56"
+    },
+    "val": {
+      "documents": 10110,
+      "tokens": 1243207,
+      "utf8_bytes": 6023412,
+      "file": "data\\processed\\val.bin",
+      "sha256": "0f9364f400b9820d85930aee8980d5bee8d37b8d64d699fabb10a355d6758a01"
+    },
+    "test": {
+      "documents": 10111,
+      "tokens": 1175149,
+      "utf8_bytes": 5726554,
+      "file": "data\\processed\\test.bin",
+      "sha256": "35435970af73a985a80590bdc858331126cfe4e236379672348d0956bed56516"
+    }
+  }
+}
